@@ -133,65 +133,79 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
-        <Card>
-          <CardHeader className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-xl sm:text-2xl">Torn Revives Tracker</CardTitle>
-                <CardDescription className="text-sm">Tracking {revives.length} revives</CardDescription>
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="flex-1 p-3 sm:p-4 md:p-6">
+        <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
+          <Card>
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl">Torn Revives Tracker</CardTitle>
+                  <CardDescription className="text-sm">Tracking {revives.length} revives</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore || isFetching}
+                    className="flex-1 sm:flex-initial bg-transparent"
+                  >
+                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load More"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    disabled={isFetching || isLoadingMore}
+                    className="px-3 bg-transparent"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="px-3 bg-transparent">
+                        <LogOut className="w-4 h-4 mr-1" />
+                        <ChevronDown className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={handleClearApiKey}>Clear API Key & Logout</DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleClearAllData} className="text-destructive">
+                        Clear All Data
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore || isFetching}
-                  className="flex-1 sm:flex-initial bg-transparent"
-                >
-                  {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load More"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={isFetching || isLoadingMore}
-                  className="px-3 bg-transparent"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="px-3 bg-transparent">
-                      <LogOut className="w-4 h-4 mr-1" />
-                      <ChevronDown className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleClearApiKey}>Clear API Key & Logout</DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleClearAllData} className="text-destructive">
-                      Clear All Data
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            {error && <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : revives.length > 0 ? (
-              <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} />
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">No revives found</div>
-            )}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              {error && <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : revives.length > 0 ? (
+                <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} />
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">No revives found</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      <footer className="py-4 text-center text-sm text-muted-foreground border-t">
+        Created by{" "}
+        <a
+          href="https://www.torn.com/profiles.php?XID=1712955"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-500 hover:text-blue-400 transition-colors"
+        >
+          Oxiblurr [1712955]
+        </a>
+      </footer>
     </div>
   )
 }
