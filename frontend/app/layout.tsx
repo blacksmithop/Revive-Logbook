@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Torn Revives Tracker",
+  title: "Revive Logbook",
   description: "Track and analyze your Torn.com revives",
   generator: "v0.app",
   icons: {
