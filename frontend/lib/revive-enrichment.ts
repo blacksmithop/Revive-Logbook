@@ -26,14 +26,35 @@ export interface ReviveData {
 
 export interface EnrichedRevive extends ReviveData {
   Success: boolean
-  Category: "PvP" | "OD" | "Crime"
+  Category: "PvP" | "OD" | "Crime" | "RR" | "Self Hosp" | "Casino"
   Chance: number
   Likelihood: "Low" | "Medium" | "High" | "Very High"
   Gain: number | null
   HospitalizedBy: string
 }
 
-function getCategory(reason: string): "PvP" | "OD" | "Crime" {
+function getCategory(reason: string): "PvP" | "OD" | "Crime" | "RR" | "Self Hosp" | "Casino" {
+  // Russian Roulette
+  if (reason.includes("Shot themselves in the foot")) {
+    return "RR"
+  }
+
+  // Self Hospitalization
+  if (reason.includes("Severe emesis following Ipecac Syrup ingestion")) {
+    return "Self Hosp"
+  }
+
+  // Casino (face punch, kick to throat, choke hold)
+  if (
+    reason.includes("Punched in the face by Leslie") ||
+    reason.includes("face punch") ||
+    reason.includes("kick to the throat") ||
+    reason.includes("choke hold")
+  ) {
+    return "Casino"
+  }
+
+  // Original categories
   if (["Lost to", "Mugged by", "Hospitalized by"].some((p) => reason.includes(p))) {
     return "PvP"
   }

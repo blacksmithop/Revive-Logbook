@@ -153,6 +153,33 @@ export async function getPaymentStatus(timestamp: number, targetId: number): Pro
   })
 }
 
+export async function setPaymentStatus(id: string, isPaid: boolean): Promise<void> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([PAYMENT_STATUS_STORE], "readwrite")
+    const store = transaction.objectStore(PAYMENT_STATUS_STORE)
+    const request = store.put({ id, isPaid })
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve()
+  })
+}
+
+export async function getPaymentStatusById(id: string): Promise<boolean | null> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([PAYMENT_STATUS_STORE], "readonly")
+    const store = transaction.objectStore(PAYMENT_STATUS_STORE)
+    const request = store.get(id)
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const result = request.result
+      resolve(result ? result.isPaid : null)
+    }
+  })
+}
+
 export async function getAllPaymentStatuses(): Promise<Record<string, boolean>> {
   const db = await initDB()
   return new Promise((resolve, reject) => {
@@ -187,5 +214,32 @@ export async function clearAllData(): Promise<void> {
 
     transaction.onerror = () => reject(transaction.error)
     transaction.oncomplete = () => resolve()
+  })
+}
+
+export async function saveExcludedFilters(excludedPlayers: string[], excludedFactions: string[]): Promise<void> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readwrite")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    store.put({ players: excludedPlayers, factions: excludedFactions }, "excludedFilters")
+
+    transaction.onerror = () => reject(transaction.error)
+    transaction.oncomplete = () => resolve()
+  })
+}
+
+export async function getExcludedFilters(): Promise<{
+  players: string[]
+  factions: string[]
+} | null> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readonly")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    const request = store.get("excludedFilters")
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result || null)
   })
 }

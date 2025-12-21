@@ -9,11 +9,15 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { ArrowUpDown, Check, CalendarIcon, ChevronLeft, ChevronRight, Eye, DollarSign, X } from "lucide-react"
+import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Eye, DollarSign, XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { InteractionLogsModal } from "./interaction-logs-modal"
-import { savePaymentStatus, getAllPaymentStatuses } from "@/lib/indexeddb"
+import { getPaymentStatus, setPaymentStatus, saveExcludedFilters, getExcludedFilters } from "@/lib/indexeddb"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Checkbox } from "@/components/ui/checkbox"
+import { CalendarIcon } from "lucide-react"
 
 interface RevivesTableProps {
   revives: EnrichedRevive[]
@@ -32,21 +36,47 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
 
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all")
-  const [dateFrom, setDateFrom] = useState<Date | undefined>()
-  const [dateTo, setDateTo] = useState<Date | undefined>()
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  })
   const [selectedTarget, setSelectedTarget] = useState<{ id: number; name: string } | null>(null)
 
   const [playerSearch, setPlayerSearch] = useState("")
   const [factionSearch, setFactionSearch] = useState("")
 
+  const [excludedPlayers, setExcludedPlayers] = useState<Set<string>>(new Set())
+  const [excludedFactions, setExcludedFactions] = useState<Set<string>>(new Set())
+  const [excludePlayerSearch, setExcludePlayerSearch] = useState("")
+  const [excludeFactionSearch, setExcludeFactionSearch] = useState("")
+
+  const [excludePlayerOpen, setExcludePlayerOpen] = useState(false)
+  const [excludeFactionOpen, setExcludeFactionOpen] = useState(false)
+
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const loadPaymentStatuses = async () => {
-      const statuses = await getAllPaymentStatuses()
+      const statuses: Record<string, boolean> = {}
+      for (const revive of revives) {
+        const id = `${revive.timestamp}_${revive.target.id}`
+        const status = await getPaymentStatus(id)
+        statuses[id] = status || false
+      }
       setPaymentStatuses(statuses)
     }
     loadPaymentStatuses()
+  }, [revives])
+
+  useEffect(() => {
+    const loadExcludedFilters = async () => {
+      const filters = await getExcludedFilters()
+      if (filters) {
+        setExcludedPlayers(new Set(filters.players))
+        setExcludedFactions(new Set(filters.factions))
+      }
+    }
+    loadExcludedFilters()
   }, [])
 
   const togglePaymentStatus = async (timestamp: number, targetId: number) => {
@@ -54,7 +84,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     const currentStatus = paymentStatuses[id] ?? false
     const newStatus = !currentStatus
 
-    await savePaymentStatus(timestamp, targetId, newStatus)
+    await setPaymentStatus(id, newStatus)
     setPaymentStatuses((prev) => ({ ...prev, [id]: newStatus }))
   }
 
@@ -65,6 +95,76 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       setSortField(field)
       setSortDirection("desc")
     }
+  }
+
+  const uniquePlayers = useMemo(() => {
+    const players = new Set<string>()
+    revives.forEach((r) => {
+      if (r.target.name) players.add(r.target.name)
+    })
+    return Array.from(players).sort()
+  }, [revives])
+
+  const uniqueFactions = useMemo(() => {
+    const factions = new Set<string>()
+    revives.forEach((r) => {
+      if (r.target.faction?.name) factions.add(r.target.faction.name)
+    })
+    return Array.from(factions).sort()
+  }, [revives])
+
+  const filteredPlayersForExclude = useMemo(() => {
+    let players = uniquePlayers
+    if (excludePlayerSearch.trim()) {
+      const searchLower = excludePlayerSearch.toLowerCase()
+      players = players.filter((p) => p.toLowerCase().includes(searchLower))
+    }
+    // Sort: excluded first, then alphabetically within each group
+    return players.sort((a, b) => {
+      const aExcluded = excludedPlayers.has(a)
+      const bExcluded = excludedFactions.has(b)
+      if (aExcluded && !bExcluded) return -1
+      if (!aExcluded && bExcluded) return 1
+      return a.localeCompare(b)
+    })
+  }, [uniquePlayers, excludePlayerSearch, excludedPlayers])
+
+  const filteredFactionsForExclude = useMemo(() => {
+    let factions = uniqueFactions
+    if (excludeFactionSearch.trim()) {
+      const searchLower = excludeFactionSearch.toLowerCase()
+      factions = factions.filter((f) => f.toLowerCase().includes(searchLower))
+    }
+    // Sort: excluded first, then alphabetically within each group
+    return factions.sort((a, b) => {
+      const aExcluded = excludedFactions.has(a)
+      const bExcluded = excludedFactions.has(b)
+      if (aExcluded && !bExcluded) return -1
+      if (!aExcluded && bExcluded) return 1
+      return a.localeCompare(b)
+    })
+  }, [uniqueFactions, excludeFactionSearch, excludedFactions])
+
+  const toggleExcludePlayer = (player: string) => {
+    const newSet = new Set(excludedPlayers)
+    if (newSet.has(player)) {
+      newSet.delete(player)
+    } else {
+      newSet.add(player)
+    }
+    setExcludedPlayers(newSet)
+    saveExcludedFilters(Array.from(newSet), Array.from(excludedFactions))
+  }
+
+  const toggleExcludeFaction = (faction: string) => {
+    const newSet = new Set(excludedFactions)
+    if (newSet.has(faction)) {
+      newSet.delete(faction)
+    } else {
+      newSet.add(faction)
+    }
+    setExcludedFactions(newSet)
+    saveExcludedFilters(Array.from(excludedPlayers), Array.from(newSet))
   }
 
   const filteredAndSortedRevives = useMemo(() => {
@@ -91,13 +191,22 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       filtered = filtered.filter((r) => r.target.faction?.name.toLowerCase().includes(searchLower))
     }
 
+    // Exclude filters
+    if (excludedPlayers.size > 0) {
+      filtered = filtered.filter((r) => !excludedPlayers.has(r.target.name))
+    }
+
+    if (excludedFactions.size > 0) {
+      filtered = filtered.filter((r) => !r.target.faction?.name || !excludedFactions.has(r.target.faction.name))
+    }
+
     // Date range filter
-    if (dateFrom) {
-      const fromTimestamp = Math.floor(dateFrom.getTime() / 1000)
+    if (dateRange.from) {
+      const fromTimestamp = Math.floor(dateRange.from.getTime() / 1000)
       filtered = filtered.filter((r) => r.timestamp >= fromTimestamp)
     }
-    if (dateTo) {
-      const toTimestamp = Math.floor(dateTo.getTime() / 1000) + 86399
+    if (dateRange.to) {
+      const toTimestamp = Math.floor(dateRange.to.getTime() / 1000) + 86399
       filtered = filtered.filter((r) => r.timestamp <= toTimestamp)
     }
 
@@ -121,7 +230,18 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     })
 
     return filtered
-  }, [revives, categoryFilter, outcomeFilter, playerSearch, factionSearch, dateFrom, dateTo, sortField, sortDirection])
+  }, [
+    revives,
+    categoryFilter,
+    outcomeFilter,
+    playerSearch,
+    factionSearch,
+    excludedPlayers,
+    excludedFactions,
+    dateRange,
+    sortField,
+    sortDirection,
+  ])
 
   const totalPages = Math.ceil(filteredAndSortedRevives.length / pageSize)
   const startIndex = (currentPage - 1) * pageSize
@@ -139,6 +259,26 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
   const handlePageSizeChange = (newSize: string) => {
     setPageSize(Number(newSize))
     setCurrentPage(1)
+  }
+
+  const handleFromDateSelect = (date: Date | undefined) => {
+    setDateRange((prev) => ({ ...prev, from: date }))
+  }
+
+  const handleToDateSelect = (date: Date | undefined) => {
+    setDateRange((prev) => ({ ...prev, to: date }))
+  }
+
+  const clearFilters = () => {
+    setCategoryFilter("all")
+    setOutcomeFilter("all")
+    setDateRange({ from: undefined, to: undefined })
+    setPlayerSearch("")
+    setFactionSearch("")
+    setExcludedPlayers(new Set())
+    setExcludedFactions(new Set())
+    setExcludePlayerSearch("")
+    setExcludeFactionSearch("")
   }
 
   const getLikelihoodColor = (likelihood: string) => {
@@ -164,6 +304,12 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
         return "bg-purple-500/20 text-purple-400 border-purple-500/30"
       case "Crime":
         return "bg-red-500/20 text-red-400 border-red-500/30"
+      case "RR":
+        return "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+      case "Self Hosp":
+        return "bg-pink-500/20 text-pink-400 border-pink-500/30"
+      case "Casino":
+        return "bg-teal-500/20 text-teal-400 border-teal-500/30"
       default:
         return "bg-muted text-muted-foreground"
     }
@@ -185,19 +331,25 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       className="flex items-center gap-1 hover:text-foreground transition-colors"
     >
       {children}
-      <ArrowUpDown className="w-3 h-3" />
+      {sortField === field && sortDirection === "asc" ? (
+        <ArrowUp className="w-3 h-3" />
+      ) : (
+        <ArrowDown className="w-3 h-3" />
+      )}
     </button>
   )
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4 items-stretch sm:items-end">
+      {/* First row: Main filters */}
+      <div className="flex flex-wrap gap-3 items-end">
         <div className="flex gap-3 flex-1 min-w-full sm:min-w-[300px]">
           <div className="space-y-2 flex-1">
             <label className="text-sm font-medium">Search Player</label>
             <Input
               placeholder="Player name..."
               value={playerSearch}
+              className="bg-transparent"
               onChange={(e) => setPlayerSearch(e.target.value)}
             />
           </div>
@@ -206,50 +358,46 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
             <Input
               placeholder="Faction name..."
               value={factionSearch}
+              className="bg-transparent"
               onChange={(e) => setFactionSearch(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="flex-1 min-w-full sm:min-w-[200px] space-y-2">
-          <label className="text-sm font-medium">Date Range</label>
-          <div className="flex gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn("flex-1 justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateFrom ? format(dateFrom, "MM/dd/yyyy") : "From"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus />
-              </PopoverContent>
-            </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn("flex-1 justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateTo ? format(dateTo, "MM/dd/yyyy") : "To"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={dateTo} onSelect={setDateTo} initialFocus />
-              </PopoverContent>
-            </Popover>
-          </div>
-        </div>
-
-        <div className="flex gap-3 flex-1">
+        <div className="flex gap-3 flex-1 min-w-full sm:min-w-[600px]">
           <div className="space-y-2 flex-1">
+            <label className="text-sm font-medium">Date Range</label>
+            <div className="flex gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange.from ? format(dateRange.from, "PPP") : "From"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dateRange.from} onSelect={handleFromDateSelect} initialFocus />
+                </PopoverContent>
+              </Popover>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange.to ? format(dateRange.to, "PPP") : "To"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dateRange.to} onSelect={handleToDateSelect} initialFocus />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-medium">Category</label>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="w-[140px] bg-transparent">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -257,14 +405,17 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                 <SelectItem value="PvP">PvP</SelectItem>
                 <SelectItem value="OD">OD</SelectItem>
                 <SelectItem value="Crime">Crime</SelectItem>
+                <SelectItem value="RR">RR</SelectItem>
+                <SelectItem value="Self Hosp">Self Hosp</SelectItem>
+                <SelectItem value="Casino">Casino</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2 flex-1">
+          <div className="space-y-2">
             <label className="text-sm font-medium">Outcome</label>
             <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="w-[140px] bg-transparent">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -276,66 +427,147 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          onClick={() => {
-            setCategoryFilter("all")
-            setOutcomeFilter("all")
-            setDateFrom(undefined)
-            setDateTo(undefined)
-            setPlayerSearch("")
-            setFactionSearch("")
-          }}
-          className="w-full sm:w-auto"
-        >
+        <Button variant="outline" onClick={clearFilters} className="whitespace-nowrap bg-transparent">
           Clear Filters
         </Button>
       </div>
 
-      <div className="hidden md:block rounded-lg border border-border overflow-hidden">
+      <div className="flex flex-wrap gap-3 items-end">
+        <div className="space-y-2 flex-1 min-w-[200px] max-w-[300px]">
+          <label className="text-sm font-medium">Exclude Players ({excludedPlayers.size})</label>
+          <DropdownMenu
+            open={excludePlayerOpen}
+            onOpenChange={(open) => {
+              setExcludePlayerOpen(open)
+              if (!open) {
+                setExcludePlayerSearch("")
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent">
+                {excludedPlayers.size > 0 ? `${excludedPlayers.size} excluded` : "Select players..."}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
+              <div className="p-2 sticky top-0 bg-background">
+                <Input
+                  placeholder="Search players..."
+                  value={excludePlayerSearch}
+                  onChange={(e) => setExcludePlayerSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="p-2 space-y-1">
+                {filteredPlayersForExclude.length > 0 ? (
+                  filteredPlayersForExclude.map((player) => (
+                    <div
+                      key={player}
+                      className="flex items-center space-x-2 py-1 px-2 hover:bg-accent rounded cursor-pointer"
+                      onClick={() => toggleExcludePlayer(player)}
+                    >
+                      <Checkbox checked={excludedPlayers.has(player)} />
+                      <span className="text-sm">{player}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-muted-foreground text-center py-2">No players found</div>
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="space-y-2 flex-1 min-w-[200px] max-w-[300px]">
+          <label className="text-sm font-medium">Exclude Factions ({excludedFactions.size})</label>
+          <DropdownMenu
+            open={excludeFactionOpen}
+            onOpenChange={(open) => {
+              setExcludeFactionOpen(open)
+              if (!open) {
+                setExcludeFactionSearch("")
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent">
+                {excludedFactions.size > 0 ? `${excludedFactions.size} excluded` : "Select factions..."}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
+              <div className="p-2 sticky top-0 bg-background">
+                <Input
+                  placeholder="Search factions..."
+                  value={excludeFactionSearch}
+                  onChange={(e) => setExcludeFactionSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="p-2 space-y-1">
+                {filteredFactionsForExclude.length > 0 ? (
+                  filteredFactionsForExclude.map((faction) => (
+                    <div
+                      key={faction}
+                      className="flex items-center space-x-2 py-1 px-2 hover:bg-accent rounded cursor-pointer"
+                      onClick={() => toggleExcludeFaction(faction)}
+                    >
+                      <Checkbox checked={excludedFactions.has(faction)} />
+                      <span className="text-sm">{faction}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-muted-foreground text-center py-2">No factions found</div>
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-                <th className="px-4 py-3 text-left font-medium">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-4 py-3 text-left font-medium">
                   <SortButton field="skill">Skill</SortButton>
-                </th>
-                <th className="px-4 py-3 text-left font-medium">
+                </TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">
                   <SortButton field="likelihood">Likelihood</SortButton>
-                </th>
-                <th className="px-4 py-3 text-left font-medium">Target</th>
-                <th className="px-4 py-3 text-left font-medium">Faction</th>
-                <th className="px-4 py-3 text-left font-medium">Hospitalized By</th>
-                <th className="px-4 py-3 text-left font-medium">Outcome</th>
-                <th className="px-4 py-3 text-left font-medium">
+                </TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Target</TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Faction</TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Hospitalized By</TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Outcome</TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">
                   <SortButton field="timestamp">Timestamp</SortButton>
-                </th>
-                <th className="px-4 py-3 text-left font-medium">Payment</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Payment</TableHead>
+                <TableHead className="px-4 py-3 text-left font-medium">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {paginatedRevives.map((revive, idx) => {
                 const paymentId = `${revive.timestamp}_${revive.target.id}`
                 const isPaid = paymentStatuses[paymentId] ?? false
 
                 return (
-                  <tr
+                  <TableRow
                     key={revive.id}
                     className={cn(
                       "border-b border-border/50 hover:bg-muted/30 transition-colors",
                       idx % 2 === 0 ? "bg-card" : "bg-muted/10",
                     )}
                   >
-                    <td className="px-4 py-3 text-sm">
+                    <TableCell className="px-4 py-3 text-sm">
                       <span className="text-emerald-400 font-mono">{revive.reviver.skill?.toFixed(2) || "-"}</span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       <Badge variant="outline" className={getLikelihoodColor(revive.Likelihood)}>
                         {revive.Chance}%
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       <a
                         href={`https://www.torn.com/profiles.php?XID=${revive.target.id}`}
                         target="_blank"
@@ -344,8 +576,8 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                       >
                         {revive.target.name}
                       </a>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground truncate max-w-[150px]">
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-muted-foreground truncate max-w-[150px]">
                       {revive.target.faction ? (
                         <a
                           href={`https://www.torn.com/factions.php?step=profile&ID=${revive.target.faction.id}`}
@@ -358,8 +590,8 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                       ) : (
                         "-"
                       )}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={getCategoryColor(revive.Category)}>
                           {revive.Category}
@@ -368,18 +600,18 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                           {revive.HospitalizedBy || "-"}
                         </span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       {revive.Success ? (
-                        <Check className="w-5 h-5 text-emerald-400" />
+                        <ArrowUp className="w-5 h-5 text-emerald-400" />
                       ) : (
-                        <span className="text-destructive">✕</span>
+                        <ArrowDown className="text-destructive" />
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {formatTimestamp(revive.timestamp)}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       <button
                         onClick={() => togglePaymentStatus(revive.timestamp, revive.target.id)}
                         className={cn(
@@ -390,10 +622,10 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                         )}
                         title={isPaid ? "Paid" : "Not Paid"}
                       >
-                        {isPaid ? <DollarSign className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        {isPaid ? <DollarSign className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
                       </button>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
                       <button
                         onClick={() => setSelectedTarget({ id: revive.target.id, name: revive.target.name })}
                         className="p-2 hover:bg-muted rounded-md transition-colors"
@@ -401,96 +633,13 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                       >
                         <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                       </button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
-
-      <div className="md:hidden space-y-3">
-        {paginatedRevives.map((revive) => {
-          const paymentId = `${revive.timestamp}_${revive.target.id}`
-          const isPaid = paymentStatuses[paymentId] ?? false
-
-          return (
-            <div key={revive.id} className="rounded-lg border border-border bg-card p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <a
-                    href={`https://www.torn.com/profiles.php?XID=${revive.target.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-lg font-semibold hover:text-primary transition-colors block truncate"
-                  >
-                    {revive.target.name}
-                  </a>
-                  {revive.target.faction && (
-                    <a
-                      href={`https://www.torn.com/factions.php?step=profile&ID=${revive.target.faction.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors block truncate"
-                    >
-                      {revive.target.faction.name}
-                    </a>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => togglePaymentStatus(revive.timestamp, revive.target.id)}
-                    className={cn(
-                      "p-2 rounded-md transition-colors",
-                      isPaid ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400",
-                    )}
-                  >
-                    {isPaid ? <DollarSign className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                  </button>
-                  {revive.Success ? (
-                    <Check className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-                  ) : (
-                    <span className="text-destructive text-xl flex-shrink-0">✕</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className={getCategoryColor(revive.Category)}>
-                  {revive.Category}
-                </Badge>
-                <Badge variant="outline" className={getLikelihoodColor(revive.Likelihood)}>
-                  {revive.Chance}%
-                </Badge>
-                <Badge variant="outline" className="bg-muted/50">
-                  Skill: {revive.reviver.skill?.toFixed(2) || "-"}
-                </Badge>
-              </div>
-
-              <div className="space-y-1 text-sm">
-                {revive.HospitalizedBy && (
-                  <div className="flex items-start gap-2">
-                    <span className="text-muted-foreground min-w-[100px]">Hospitalized:</span>
-                    <span className="text-foreground">{revive.HospitalizedBy}</span>
-                  </div>
-                )}
-                <div className="flex items-start gap-2">
-                  <span className="text-muted-foreground min-w-[100px]">Time:</span>
-                  <span className="text-foreground">{formatTimestamp(revive.timestamp)}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedTarget({ id: revive.target.id, name: revive.target.name })}
-                className="w-full flex items-center justify-center gap-2 p-2 hover:bg-muted rounded-md transition-colors text-sm"
-              >
-                <Eye className="w-4 h-4" />
-                View Interaction Logs
-              </button>
-            </div>
-          )
-        })}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
