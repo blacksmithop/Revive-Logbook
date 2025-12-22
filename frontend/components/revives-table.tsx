@@ -13,7 +13,7 @@ import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Eye, DollarSign, XIcon }
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { InteractionLogsModal } from "./interaction-logs-modal"
-import { getPaymentStatus, setPaymentStatus, saveExcludedFilters, getExcludedFilters } from "@/lib/indexeddb"
+import { getAllPaymentStatuses, setPaymentStatus, saveExcludedFilters, getExcludedFilters } from "@/lib/indexeddb"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -57,16 +57,11 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
 
   useEffect(() => {
     const loadPaymentStatuses = async () => {
-      const statuses: Record<string, boolean> = {}
-      for (const revive of revives) {
-        const id = `${revive.timestamp}_${revive.target.id}`
-        const status = await getPaymentStatus(id)
-        statuses[id] = status || false
-      }
+      const statuses = await getAllPaymentStatuses()
       setPaymentStatuses(statuses)
     }
     loadPaymentStatuses()
-  }, [revives])
+  }, [])
 
   useEffect(() => {
     const loadExcludedFilters = async () => {

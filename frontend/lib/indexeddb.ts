@@ -124,35 +124,6 @@ export async function clearApiKey(): Promise<void> {
   })
 }
 
-export async function savePaymentStatus(timestamp: number, targetId: number, isPaid: boolean): Promise<void> {
-  const db = await initDB()
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([PAYMENT_STATUS_STORE], "readwrite")
-    const store = transaction.objectStore(PAYMENT_STATUS_STORE)
-    const id = `${timestamp}_${targetId}`
-    const request = store.put({ id, timestamp, targetId, isPaid })
-
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve()
-  })
-}
-
-export async function getPaymentStatus(timestamp: number, targetId: number): Promise<boolean | null> {
-  const db = await initDB()
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([PAYMENT_STATUS_STORE], "readonly")
-    const store = transaction.objectStore(PAYMENT_STATUS_STORE)
-    const id = `${timestamp}_${targetId}`
-    const request = store.get(id)
-
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => {
-      const result = request.result
-      resolve(result ? result.isPaid : null)
-    }
-  })
-}
-
 export async function setPaymentStatus(id: string, isPaid: boolean): Promise<void> {
   const db = await initDB()
   return new Promise((resolve, reject) => {
@@ -165,7 +136,7 @@ export async function setPaymentStatus(id: string, isPaid: boolean): Promise<voi
   })
 }
 
-export async function getPaymentStatusById(id: string): Promise<boolean | null> {
+export async function getPaymentStatus(id: string): Promise<boolean> {
   const db = await initDB()
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([PAYMENT_STATUS_STORE], "readonly")
@@ -175,7 +146,7 @@ export async function getPaymentStatusById(id: string): Promise<boolean | null> 
     request.onerror = () => reject(request.error)
     request.onsuccess = () => {
       const result = request.result
-      resolve(result ? result.isPaid : null)
+      resolve(result ? result.isPaid : false)
     }
   })
 }
