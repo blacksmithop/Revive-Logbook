@@ -15,7 +15,8 @@ import {
   clearApiKey,
   clearAllData,
 } from "@/lib/indexeddb"
-import { Loader2, RefreshCw, LogOut, ChevronDown } from "lucide-react"
+import { Loader2, RefreshCw, LogOut, ChevronDown, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 
 interface RevivesDashboardProps {
   onLogout: () => void
@@ -30,6 +31,7 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   const [userReviveId, setUserReviveId] = useState<number>(0)
   const [hasMoreData, setHasMoreData] = useState(true)
   const [mode, setMode] = useState<"user" | "faction">("user")
+  const [factionId, setFactionId] = useState<number>(0)
 
   const fetchRevives = async (backfill = false) => {
     if (backfill) {
@@ -85,6 +87,9 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         if (!userReviveId && fetchedRevives[0]?.reviver?.id) {
           setUserReviveId(fetchedRevives[0].reviver.id)
         }
+        if (!factionId && fetchedRevives[0]?.reviver?.faction?.id) {
+          setFactionId(fetchedRevives[0].reviver.faction.id)
+        }
 
         await saveRevives(fetchedRevives, currentMode)
 
@@ -115,6 +120,9 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         setRevives(enriched)
         if (cachedRevives[0]?.reviver?.id) {
           setUserReviveId(cachedRevives[0].reviver.id)
+        }
+        if (cachedRevives[0]?.reviver?.faction?.id) {
+          setFactionId(cachedRevives[0].reviver.faction.id)
         }
       }
     } catch (err) {
@@ -155,6 +163,119 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     }
   }
 
+  const handleExportToExcel = () => {
+    if (revives.length === 0) {
+      alert("No data to export")
+      return
+    }
+
+    const sortedRevives = [...revives].sort((a, b) => b.timestamp - a.timestamp)
+
+    // Prepare data rows based on mode
+    const data = sortedRevives.map((revive) => {
+      const timestamp = new Date(revive.timestamp * 1000).toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+      const outcome = revive.Success ? "Success" : "Failed"
+      const paymentStatus = revive.isPaid ? "Paid" : "Unpaid"
+      const reviveChance = `${revive.Chance.toFixed(2)}%`
+
+      if (mode === "user") {
+        return {
+          Target: revive.target.name,
+          "Target Faction": revive.target.faction?.name || "N/A",
+          "Hospitalized By": revive.HospitalizedBy || "N/A",
+          Category: revive.Category || "N/A",
+          Skill: revive.reviver.skill?.toFixed(2) || "N/A",
+          "Revive Chance": reviveChance,
+          Outcome: outcome,
+          Timestamp: timestamp,
+          Payment: paymentStatus,
+        }
+      } else {
+        return {
+          Reviver: revive.reviver.name,
+          "Reviver ID": revive.reviver.id,
+          Target: revive.target.name,
+          "Target Faction": revive.target.faction?.name || "N/A",
+          "Hospitalized By": revive.HospitalizedBy || "N/A",
+          Category: revive.Category || "N/A",
+          Skill: revive.reviver.skill?.toFixed(2) || "N/A",
+          "Revive Chance": reviveChance,
+          Outcome: outcome,
+          Timestamp: timestamp,
+          Payment: paymentStatus,
+        }
+      }
+    })
+
+    // Create worksheet
+    const worksheet = XLSX.utils.json_to_sheet(data)
+
+    // Set column widths for better readability
+    const columnWidths =
+      mode === "user"
+        ? [
+            { wch: 18 }, // Target
+            { wch: 20 }, // Target Faction
+            { wch: 25 }, // Hospitalized By
+            { wch: 12 }, // Category
+            { wch: 8 }, // Skill
+            { wch: 12 }, // Revive Chance
+            { wch: 10 }, // Outcome
+            { wch: 20 }, // Timestamp
+            { wch: 10 }, // Payment
+          ]
+        : [
+            { wch: 18 }, // Reviver
+            { wch: 12 }, // Reviver ID
+            { wch: 18 }, // Target
+            { wch: 20 }, // Target Faction
+            { wch: 25 }, // Hospitalized By
+            { wch: 12 }, // Category
+            { wch: 8 }, // Skill
+            { wch: 12 }, // Revive Chance
+            { wch: 10 }, // Outcome
+            { wch: 20 }, // Timestamp
+            { wch: 10 }, // Payment
+          ]
+
+    worksheet["!cols"] = columnWidths
+
+    // Create workbook and append worksheet
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Revives")
+
+    // Generate filename
+    const now = new Date()
+    const day = String(now.getDate()).padStart(2, "0")
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const year = now.getFullYear()
+    const uuid = crypto.randomUUID().split("-")[0]
+
+    const id = mode === "user" ? userReviveId : factionId
+    const filename = `${id}_revives_${day}${month}${year}_${uuid}.xlsx`
+
+    // Write to binary string and create blob for browser download
+    const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+    const blob = new Blob([wbout], { type: "application/octet-stream" })
+
+    // Create download link and trigger download
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="flex-1 p-3 sm:p-4 md:p-6">
@@ -169,6 +290,16 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                   <CardDescription className="text-sm">Tracking {revives.length} revives</CardDescription>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportToExcel}
+                    disabled={revives.length === 0}
+                    className="flex-1 sm:flex-initial bg-transparent"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    Export
+                  </Button>
                   <div className="flex-1 sm:flex-initial relative group">
                     <Button
                       variant="outline"
