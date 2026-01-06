@@ -1,9 +1,10 @@
 // IndexedDB utilities for storing API key and revives data
 const DB_NAME = "TornRevivesDB"
-const DB_VERSION = 2 // Increment version for payment status store
+const DB_VERSION = 3
 const SETTINGS_STORE = "settings"
-const REVIVES_STORE = "revives"
-const PAYMENT_STATUS_STORE = "paymentStatus" // New store for payment status
+const USER_REVIVES_STORE = "userRevives"
+const FACTION_REVIVES_STORE = "factionRevives"
+const PAYMENT_STATUS_STORE = "paymentStatus"
 
 let dbInstance: IDBDatabase | null = null
 
@@ -27,10 +28,18 @@ export async function initDB(): Promise<IDBDatabase> {
         db.createObjectStore(SETTINGS_STORE)
       }
 
-      // Revives store with timestamp index
-      if (!db.objectStoreNames.contains(REVIVES_STORE)) {
-        const revivesStore = db.createObjectStore(REVIVES_STORE, { keyPath: "id" })
-        revivesStore.createIndex("timestamp", "timestamp", { unique: false })
+      if (!db.objectStoreNames.contains(USER_REVIVES_STORE)) {
+        const userRevivesStore = db.createObjectStore(USER_REVIVES_STORE, { keyPath: "id" })
+        userRevivesStore.createIndex("timestamp", "timestamp", { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(FACTION_REVIVES_STORE)) {
+        const factionRevivesStore = db.createObjectStore(FACTION_REVIVES_STORE, { keyPath: "id" })
+        factionRevivesStore.createIndex("timestamp", "timestamp", { unique: false })
+      }
+
+      if (db.objectStoreNames.contains("revives")) {
+        db.deleteObjectStore("revives")
       }
 
       if (!db.objectStoreNames.contains(PAYMENT_STATUS_STORE)) {
@@ -64,11 +73,13 @@ export async function getApiKey(): Promise<string | null> {
   })
 }
 
-export async function saveRevives(revives: any[]): Promise<void> {
+export async function saveRevives(revives: any[], mode: "user" | "faction" = "user"): Promise<void> {
   const db = await initDB()
+  const storeName = mode === "user" ? USER_REVIVES_STORE : FACTION_REVIVES_STORE
+
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([REVIVES_STORE], "readwrite")
-    const store = transaction.objectStore(REVIVES_STORE)
+    const transaction = db.transaction([storeName], "readwrite")
+    const store = transaction.objectStore(storeName)
 
     // Add all revives
     revives.forEach((revive) => {
@@ -80,11 +91,13 @@ export async function saveRevives(revives: any[]): Promise<void> {
   })
 }
 
-export async function getAllRevives(): Promise<any[]> {
+export async function getAllRevives(mode: "user" | "faction" = "user"): Promise<any[]> {
   const db = await initDB()
+  const storeName = mode === "user" ? USER_REVIVES_STORE : FACTION_REVIVES_STORE
+
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([REVIVES_STORE], "readonly")
-    const store = transaction.objectStore(REVIVES_STORE)
+    const transaction = db.transaction([storeName], "readonly")
+    const store = transaction.objectStore(storeName)
     const request = store.getAll()
 
     request.onerror = () => reject(request.error)
@@ -92,11 +105,13 @@ export async function getAllRevives(): Promise<any[]> {
   })
 }
 
-export async function getOldestTimestamp(): Promise<number | null> {
+export async function getOldestTimestamp(mode: "user" | "faction" = "user"): Promise<number | null> {
   const db = await initDB()
+  const storeName = mode === "user" ? USER_REVIVES_STORE : FACTION_REVIVES_STORE
+
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([REVIVES_STORE], "readonly")
-    const store = transaction.objectStore(REVIVES_STORE)
+    const transaction = db.transaction([storeName], "readonly")
+    const store = transaction.objectStore(storeName)
     const index = store.index("timestamp")
     const request = index.openCursor(null, "next")
 
@@ -173,14 +188,19 @@ export async function getAllPaymentStatuses(): Promise<Record<string, boolean>> 
 export async function clearAllData(): Promise<void> {
   const db = await initDB()
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([SETTINGS_STORE, REVIVES_STORE, PAYMENT_STATUS_STORE], "readwrite")
+    const transaction = db.transaction(
+      [SETTINGS_STORE, USER_REVIVES_STORE, FACTION_REVIVES_STORE, PAYMENT_STATUS_STORE],
+      "readwrite",
+    )
 
     const settingsStore = transaction.objectStore(SETTINGS_STORE)
-    const revivesStore = transaction.objectStore(REVIVES_STORE)
+    const userRevivesStore = transaction.objectStore(USER_REVIVES_STORE)
+    const factionRevivesStore = transaction.objectStore(FACTION_REVIVES_STORE)
     const paymentStore = transaction.objectStore(PAYMENT_STATUS_STORE)
 
     settingsStore.clear()
-    revivesStore.clear()
+    userRevivesStore.clear()
+    factionRevivesStore.clear()
     paymentStore.clear()
 
     transaction.onerror = () => reject(transaction.error)
@@ -212,5 +232,29 @@ export async function getExcludedFilters(): Promise<{
 
     request.onerror = () => reject(request.error)
     request.onsuccess = () => resolve(request.result || null)
+  })
+}
+
+export async function saveApiMode(mode: "user" | "faction"): Promise<void> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readwrite")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    const request = store.put(mode, "apiMode")
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve()
+  })
+}
+
+export async function getApiMode(): Promise<"user" | "faction"> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readonly")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    const request = store.get("apiMode")
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result || "user")
   })
 }

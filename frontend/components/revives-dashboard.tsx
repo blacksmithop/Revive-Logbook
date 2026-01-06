@@ -6,7 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RevivesTable } from "./revives-table"
 import { enrichRevives, type EnrichedRevive } from "@/lib/revive-enrichment"
-import { getApiKey, saveRevives, getAllRevives, getOldestTimestamp, clearApiKey, clearAllData } from "@/lib/indexeddb"
+import {
+  getApiKey,
+  getApiMode,
+  saveRevives,
+  getAllRevives,
+  getOldestTimestamp,
+  clearApiKey,
+  clearAllData,
+} from "@/lib/indexeddb"
 import { Loader2, RefreshCw, LogOut, ChevronDown } from "lucide-react"
 
 interface RevivesDashboardProps {
@@ -20,6 +28,8 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState("")
   const [userReviveId, setUserReviveId] = useState<number>(0)
+  const [hasMoreData, setHasMoreData] = useState(true)
+  const [mode, setMode] = useState<"user" | "faction">("user")
 
   const fetchRevives = async (backfill = false) => {
     if (backfill) {
@@ -36,11 +46,18 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         return
       }
 
-      let url = "https://api.torn.com/v2/user/revives?filters=outgoing&limit=100&striptags=true"
+      const currentMode = await getApiMode()
+      setMode(currentMode)
 
-      // For backfill, get oldest timestamp and add it as `to` parameter
+      const baseUrl =
+        currentMode === "user"
+          ? "https://api.torn.com/v2/user/revives?filters=outgoing&limit=100&striptags=true"
+          : "https://api.torn.com/v2/faction/revives?filters=outgoing&limit=100&sort=DESC&striptags=true"
+
+      let url = baseUrl
+
       if (backfill) {
-        const oldestTimestamp = await getOldestTimestamp()
+        const oldestTimestamp = await getOldestTimestamp(currentMode)
         if (oldestTimestamp) {
           url += `&to=${oldestTimestamp}`
         }
@@ -60,19 +77,22 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
       const data = await response.json()
       const fetchedRevives = data.revives || []
 
+      if (backfill && fetchedRevives.length === 0) {
+        setHasMoreData(false)
+      }
+
       if (fetchedRevives.length > 0) {
-        // Get user's revive ID from first revive
         if (!userReviveId && fetchedRevives[0]?.reviver?.id) {
           setUserReviveId(fetchedRevives[0].reviver.id)
         }
 
-        // Save to IndexedDB
-        await saveRevives(fetchedRevives)
+        await saveRevives(fetchedRevives, currentMode)
 
-        // Load all revives from IndexedDB and enrich
-        const allRevives = await getAllRevives()
+        const allRevives = await getAllRevives(currentMode)
         const enriched = enrichRevives(allRevives, fetchedRevives[0]?.reviver?.id || userReviveId)
         setRevives(enriched)
+      } else if (backfill) {
+        setHasMoreData(false)
       }
     } catch (err) {
       setError("Failed to fetch revives. Please try again.")
@@ -86,7 +106,10 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
 
   const loadFromCache = async () => {
     try {
-      const cachedRevives = await getAllRevives()
+      const currentMode = await getApiMode()
+      setMode(currentMode)
+
+      const cachedRevives = await getAllRevives(currentMode)
       if (cachedRevives.length > 0) {
         const enriched = enrichRevives(cachedRevives, cachedRevives[0]?.reviver?.id || 0)
         setRevives(enriched)
@@ -100,11 +123,11 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   }
 
   useEffect(() => {
-    // Load cached data first, then fetch fresh data
     loadFromCache().then(() => fetchRevives())
   }, [])
 
   const handleRefresh = () => {
+    setHasMoreData(true)
     fetchRevives(false)
   }
 
@@ -137,22 +160,31 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
       <div className="flex-1 p-3 sm:p-4 md:p-6">
         <div className="max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
           <Card>
-            <CardHeader className="p-4 sm:p-6">
+            <CardHeader className="p-4 sm:p-6 pb-3">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-xl sm:text-2xl">Torn Revives Tracker</CardTitle>
+                  <CardTitle className="text-xl sm:text-2xl">
+                    Torn Revives Tracker {mode === "faction" && "(Faction)"}
+                  </CardTitle>
                   <CardDescription className="text-sm">Tracking {revives.length} revives</CardDescription>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLoadMore}
-                    disabled={isLoadingMore || isFetching}
-                    className="flex-1 sm:flex-initial bg-transparent"
-                  >
-                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load More"}
-                  </Button>
+                  <div className="flex-1 sm:flex-initial relative group">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLoadMore}
+                      disabled={isLoadingMore || isFetching || !hasMoreData}
+                      className="w-full bg-transparent"
+                    >
+                      {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load More"}
+                    </Button>
+                    {!hasMoreData && (
+                      <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-lg whitespace-nowrap border z-50">
+                        No more data available
+                      </div>
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -179,14 +211,14 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6">
+            <CardContent className="p-4 sm:p-6 pt-3">
               {error && <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : revives.length > 0 ? (
-                <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} />
+                <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} mode={mode} />
               ) : (
                 <div className="text-center py-12 text-muted-foreground">No revives found</div>
               )}
@@ -201,7 +233,7 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
           href="https://www.torn.com/profiles.php?XID=1712955"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-blue-500 hover:text-blue-400 transition-colors"
+          className="text-white/90 hover:text-white font-semibold transition-colors"
         >
           Oxiblurr [1712955]
         </a>

@@ -1,13 +1,12 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { saveApiKey } from "@/lib/indexeddb"
-import { ExternalLink } from "lucide-react"
+import { saveApiKey, saveApiMode } from "@/lib/indexeddb"
+import { ExternalLink, Info } from "lucide-react"
 
 interface LoginFormProps {
   onLogin: () => void
@@ -17,6 +16,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [apiKey, setApiKey] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [mode, setMode] = useState<"user" | "faction">("user")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,8 +29,12 @@ export function LoginForm({ onLogin }: LoginFormProps) {
 
     setIsLoading(true)
     try {
-      // Test the API key with a simple request
-      const response = await fetch(`https://api.torn.com/v2/user/revives?filters=outgoing&limit=1&striptags=true`, {
+      const endpoint =
+        mode === "user"
+          ? "https://api.torn.com/v2/user/revives?filters=outgoing&limit=1&striptags=true"
+          : "https://api.torn.com/v2/faction/revives?filters=outgoing&limit=1&sort=DESC&striptags=true"
+
+      const response = await fetch(endpoint, {
         headers: {
           accept: "application/json",
           Authorization: `ApiKey ${apiKey}`,
@@ -41,8 +45,8 @@ export function LoginForm({ onLogin }: LoginFormProps) {
         throw new Error("Invalid API key")
       }
 
-      // Save the API key to IndexedDB
       await saveApiKey(apiKey)
+      await saveApiMode(mode)
       onLogin()
     } catch (err) {
       setError("Failed to authenticate. Please check your API key.")
@@ -50,6 +54,11 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       setIsLoading(false)
     }
   }
+
+  const apiKeyUrl =
+    mode === "user"
+      ? "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=ReviveLogbook&torn=items&user=revives,log"
+      : "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=FactionReviveTracker&faction=revives"
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -61,6 +70,31 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setMode("user")}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    mode === "user"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  User
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("faction")}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    mode === "faction"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Faction
+                </button>
+              </div>
+
               <div className="space-y-2">
                 <Input
                   type="password"
@@ -69,17 +103,32 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                   onChange={(e) => setApiKey(e.target.value)}
                   disabled={isLoading}
                 />
-                <a
-                  href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=ReviveLogbook&torn=items&user=revives,log"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-sm text-white/90 hover:text-white font-semibold transition-colors"
-                >
-                  Create Custom API Key
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="text-center">
+                  <a
+                    href={apiKeyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-white/90 hover:text-white font-semibold transition-colors"
+                  >
+                    Create Custom API Key {mode === "faction" ? "(Faction)" : ""}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
+
+              <div className="bg-muted/50 border border-border rounded-lg p-6 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Info className="h-5 w-5 mt-0.5 flex-shrink-0 text-white/70" />
+                  <div className="space-y-1.5 text-sm text-white/90 leading-relaxed">
+                    <p>• Your API Key is stored in the browser</p>
+                    <p>• All requests are made in the browser itself</p>
+                    <p>• Logout anytime to clear your data & API Key</p>
+                    <p>• Feel free to contact me in-game for any questions</p>
+                  </div>
+                </div>
+              </div>
+
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Authenticating..." : "Login"}
               </Button>

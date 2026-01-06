@@ -9,7 +9,17 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Eye, DollarSign, XIcon } from "lucide-react"
+import {
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  DollarSign,
+  XIcon,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { InteractionLogsModal } from "./interaction-logs-modal"
@@ -18,21 +28,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { CalendarIcon } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 
 interface RevivesTableProps {
   revives: EnrichedRevive[]
   onLoadMore: () => void
   isLoadingMore: boolean
+  mode: "user" | "faction" // Added mode prop to distinguish user/faction API mode
+  onPaymentStatusChange: (timestamp: number, targetId: number) => void
 }
 
 type SortField = "timestamp" | "skill" | "likelihood"
 type SortDirection = "asc" | "desc"
 
-export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTableProps) {
+export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPaymentStatusChange }: RevivesTableProps) {
   const [sortField, setSortField] = useState<SortField>("timestamp")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [pageJumpInput, setPageJumpInput] = useState("")
 
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all")
@@ -74,6 +88,10 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     loadExcludedFilters()
   }, [])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [categoryFilter, outcomeFilter, playerSearch, factionSearch, excludedPlayers, excludedFactions, dateRange])
+
   const togglePaymentStatus = async (timestamp: number, targetId: number) => {
     const id = `${timestamp}_${targetId}`
     const currentStatus = paymentStatuses[id] ?? false
@@ -81,6 +99,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
 
     await setPaymentStatus(id, newStatus)
     setPaymentStatuses((prev) => ({ ...prev, [id]: newStatus }))
+    onPaymentStatusChange(timestamp, targetId)
   }
 
   const handleSort = (field: SortField) => {
@@ -114,7 +133,6 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       const searchLower = excludePlayerSearch.toLowerCase()
       players = players.filter((p) => p.toLowerCase().includes(searchLower))
     }
-    // Sort: excluded first, then alphabetically within each group
     return players.sort((a, b) => {
       const aExcluded = excludedPlayers.has(a)
       const bExcluded = excludedFactions.has(b)
@@ -130,7 +148,6 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       const searchLower = excludeFactionSearch.toLowerCase()
       factions = factions.filter((f) => f.toLowerCase().includes(searchLower))
     }
-    // Sort: excluded first, then alphabetically within each group
     return factions.sort((a, b) => {
       const aExcluded = excludedFactions.has(a)
       const bExcluded = excludedFactions.has(b)
@@ -165,12 +182,10 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
   const filteredAndSortedRevives = useMemo(() => {
     let filtered = [...revives]
 
-    // Category filter
     if (categoryFilter !== "all") {
       filtered = filtered.filter((r) => r.Category === categoryFilter)
     }
 
-    // Outcome filter
     if (outcomeFilter !== "all") {
       const isSuccess = outcomeFilter === "success"
       filtered = filtered.filter((r) => r.Success === isSuccess)
@@ -186,7 +201,6 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       filtered = filtered.filter((r) => r.target.faction?.name.toLowerCase().includes(searchLower))
     }
 
-    // Exclude filters
     if (excludedPlayers.size > 0) {
       filtered = filtered.filter((r) => !excludedPlayers.has(r.target.name))
     }
@@ -195,7 +209,6 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       filtered = filtered.filter((r) => !r.target.faction?.name || !excludedFactions.has(r.target.faction.name))
     }
 
-    // Date range filter
     if (dateRange.from) {
       const fromTimestamp = Math.floor(dateRange.from.getTime() / 1000)
       filtered = filtered.filter((r) => r.timestamp >= fromTimestamp)
@@ -205,7 +218,6 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
       filtered = filtered.filter((r) => r.timestamp <= toTimestamp)
     }
 
-    // Sort
     filtered.sort((a, b) => {
       let comparison = 0
 
@@ -264,7 +276,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     setDateRange((prev) => ({ ...prev, to: date }))
   }
 
-  const clearFilters = () => {
+  const resetFilters = () => {
     setCategoryFilter("all")
     setOutcomeFilter("all")
     setDateRange({ from: undefined, to: undefined })
@@ -274,6 +286,8 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     setExcludedFactions(new Set())
     setExcludePlayerSearch("")
     setExcludeFactionSearch("")
+    setSortField("timestamp")
+    setSortDirection("desc")
   }
 
   const getLikelihoodColor = (likelihood: string) => {
@@ -334,101 +348,118 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
     </button>
   )
 
+  const handlePageJump = () => {
+    const pageNum = Number(pageJumpInput)
+    if (pageNum >= 1 && pageNum <= totalPages) {
+      handlePageChange(pageNum)
+      setPageJumpInput("")
+    }
+  }
+
+  const handlePageJumpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handlePageJump()
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      {/* First row: Main filters */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex gap-3 flex-1 min-w-full sm:min-w-[300px]">
-          <div className="space-y-2 flex-1">
-            <label className="text-sm font-medium">Search Player</label>
-            <Input
-              placeholder="Player name..."
-              value={playerSearch}
-              className="bg-transparent"
-              onChange={(e) => setPlayerSearch(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2 flex-1">
-            <label className="text-sm font-medium">Search Faction</label>
-            <Input
-              placeholder="Faction name..."
-              value={factionSearch}
-              className="bg-transparent"
-              onChange={(e) => setFactionSearch(e.target.value)}
-            />
-          </div>
+    <div className="space-y-3">
+      {/* Row 1: Search Player, Search Faction, Date Range */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Search Player</label>
+          <Input
+            placeholder="Player name..."
+            value={playerSearch}
+            className="bg-transparent"
+            onChange={(e) => setPlayerSearch(e.target.value)}
+          />
         </div>
 
-        <div className="flex gap-3 flex-1 min-w-full sm:min-w-[600px]">
-          <div className="space-y-2 flex-1">
-            <label className="text-sm font-medium">Date Range</label>
-            <div className="flex gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.from ? format(dateRange.from, "PPP") : "From"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dateRange.from} onSelect={handleFromDateSelect} initialFocus />
-                </PopoverContent>
-              </Popover>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.to ? format(dateRange.to, "PPP") : "To"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dateRange.to} onSelect={handleToDateSelect} initialFocus />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Category</label>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[140px] bg-transparent">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="PvP">PvP</SelectItem>
-                <SelectItem value="OD">OD</SelectItem>
-                <SelectItem value="Crime">Crime</SelectItem>
-                <SelectItem value="RR">RR</SelectItem>
-                <SelectItem value="Self Hosp">Self Hosp</SelectItem>
-                <SelectItem value="Casino">Casino</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Outcome</label>
-            <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
-              <SelectTrigger className="w-[140px] bg-transparent">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="failure">Failure</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Search Faction</label>
+          <Input
+            placeholder="Faction name..."
+            value={factionSearch}
+            className="bg-transparent"
+            onChange={(e) => setFactionSearch(e.target.value)}
+          />
         </div>
 
-        <Button variant="outline" onClick={clearFilters} className="whitespace-nowrap bg-transparent">
-          Clear Filters
-        </Button>
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium">Date Range</label>
+          <div className="flex gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange.from ? format(dateRange.from, "PPP") : "From"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={dateRange.from} onSelect={handleFromDateSelect} initialFocus />
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange.to ? format(dateRange.to, "PPP") : "To"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={dateRange.to} onSelect={handleToDateSelect} initialFocus />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="space-y-2 flex-1 min-w-[200px] max-w-[300px]">
+      {/* Row 2: Category, Outcome, Clear Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Category</label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="bg-transparent">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="PvP">PvP</SelectItem>
+              <SelectItem value="OD">OD</SelectItem>
+              <SelectItem value="Crime">Crime</SelectItem>
+              <SelectItem value="RR">RR</SelectItem>
+              <SelectItem value="Self Hosp">Self Hosp</SelectItem>
+              <SelectItem value="Casino">Casino</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Outcome</label>
+          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+            <SelectTrigger className="bg-transparent">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="success">Success</SelectItem>
+              <SelectItem value="failure">Failure</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="md:col-span-2 flex justify-end">
+          <Button variant="outline" onClick={resetFilters} className="bg-transparent h-10">
+            Reset
+          </Button>
+        </div>
+      </div>
+
+      {/* Row 3: Exclude Players, Exclude Factions */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div className="space-y-2">
           <label className="text-sm font-medium">Exclude Players ({excludedPlayers.size})</label>
           <DropdownMenu
             open={excludePlayerOpen}
@@ -473,7 +504,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
           </DropdownMenu>
         </div>
 
-        <div className="space-y-2 flex-1 min-w-[200px] max-w-[300px]">
+        <div className="space-y-2">
           <label className="text-sm font-medium">Exclude Factions ({excludedFactions.size})</label>
           <DropdownMenu
             open={excludeFactionOpen}
@@ -524,6 +555,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
           <Table>
             <TableHeader>
               <TableRow>
+                {mode === "faction" && <TableHead className="px-4 py-3 text-left font-medium">Reviver</TableHead>}
                 <TableHead className="px-4 py-3 text-left font-medium">
                   <SortButton field="skill">Skill</SortButton>
                 </TableHead>
@@ -538,7 +570,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                   <SortButton field="timestamp">Timestamp</SortButton>
                 </TableHead>
                 <TableHead className="px-4 py-3 text-left font-medium">Payment</TableHead>
-                <TableHead className="px-4 py-3 text-left font-medium">Actions</TableHead>
+                {mode === "user" && <TableHead className="px-4 py-3 text-left font-medium">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -554,6 +586,18 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                       idx % 2 === 0 ? "bg-card" : "bg-muted/10",
                     )}
                   >
+                    {mode === "faction" && (
+                      <TableCell className="px-4 py-3">
+                        <a
+                          href={`https://www.torn.com/profiles.php?XID=${revive.reviver.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground hover:text-primary transition-colors"
+                        >
+                          {revive.reviver.name}
+                        </a>
+                      </TableCell>
+                    )}
                     <TableCell className="px-4 py-3 text-sm">
                       <span className="text-emerald-400 font-mono">{revive.reviver.skill?.toFixed(2) || "-"}</span>
                     </TableCell>
@@ -620,15 +664,17 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
                         {isPaid ? <DollarSign className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
                       </button>
                     </TableCell>
-                    <TableCell className="px-4 py-3">
-                      <button
-                        onClick={() => setSelectedTarget({ id: revive.target.id, name: revive.target.name })}
-                        className="p-2 hover:bg-muted rounded-md transition-colors"
-                        title="View interaction logs"
-                      >
-                        <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                      </button>
-                    </TableCell>
+                    {mode === "user" && (
+                      <TableCell className="px-4 py-3">
+                        <button
+                          onClick={() => setSelectedTarget({ id: revive.target.id, name: revive.target.name })}
+                          className="p-2 hover:bg-muted rounded-md transition-colors"
+                          title="View interaction logs"
+                        >
+                          <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 )
               })}
@@ -637,7 +683,192 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
         </div>
       </div>
 
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {paginatedRevives.map((revive) => {
+          const paymentId = `${revive.timestamp}_${revive.target.id}`
+          const isPaid = paymentStatuses[paymentId] ?? false
+
+          return (
+            <Card key={revive.id} className="bg-card/50">
+              <CardContent className="p-4 space-y-3">
+                {mode === "faction" && (
+                  <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                    <span className="text-xs text-muted-foreground">Reviver</span>
+                    <a
+                      href={`https://www.torn.com/profiles.php?XID=${revive.reviver.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      {revive.reviver.name}
+                    </a>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Skill</span>
+                  <span className="text-emerald-400 font-mono text-sm">{revive.reviver.skill?.toFixed(2) || "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Likelihood</span>
+                  <Badge variant="outline" className={getLikelihoodColor(revive.Likelihood)}>
+                    {revive.Chance}%
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Target</span>
+                  <a
+                    href={`https://www.torn.com/profiles.php?XID=${revive.target.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-foreground hover:text-primary transition-colors"
+                  >
+                    {revive.target.name}
+                  </a>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Faction</span>
+                  <span className="text-sm text-muted-foreground truncate max-w-[150px]">
+                    {revive.target.faction ? (
+                      <a
+                        href={`https://www.torn.com/factions.php?step=profile&ID=${revive.target.faction.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-foreground transition-colors"
+                      >
+                        {revive.target.faction.name}
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Hospitalized By</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={getCategoryColor(revive.Category)}>
+                      {revive.Category}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground max-w-[200px] truncate">
+                      {revive.HospitalizedBy || "-"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Outcome</span>
+                  <span className="text-sm">
+                    {revive.Success ? (
+                      <ArrowUp className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <ArrowDown className="text-destructive" />
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Timestamp</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    {formatTimestamp(revive.timestamp)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Payment</span>
+                  <button
+                    onClick={() => togglePaymentStatus(revive.timestamp, revive.target.id)}
+                    className={cn(
+                      "p-2 rounded-md transition-colors",
+                      isPaid
+                        ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                        : "bg-red-500/20 text-red-400 hover:bg-red-500/30",
+                    )}
+                    title={isPaid ? "Paid" : "Not Paid"}
+                  >
+                    {isPaid ? <DollarSign className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                  </button>
+                </div>
+                {mode === "user" && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Actions</span>
+                    <button
+                      onClick={() => setSelectedTarget({ id: revive.target.id, name: revive.target.name })}
+                      className="p-2 hover:bg-muted rounded-md transition-colors"
+                      title="View interaction logs"
+                    >
+                      <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages || 1}
+          </span>
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1}
+              title="Go to first page"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              title="Previous page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="1"
+                max={totalPages}
+                value={pageJumpInput}
+                onChange={(e) => setPageJumpInput(e.target.value)}
+                onKeyDown={handlePageJumpKeyDown}
+                placeholder="Go to"
+                className="w-16 h-8 text-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePageJump}
+                disabled={!pageJumpInput || Number(pageJumpInput) < 1 || Number(pageJumpInput) > totalPages}
+                title="Go to page"
+              >
+                Go
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages || totalPages === 0}
+              title="Next page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages || totalPages === 0}
+              title="Go to last page"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Rows per page:</span>
           <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
@@ -652,33 +883,9 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore }: RevivesTabl
             </SelectContent>
           </Select>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages || 1}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages || totalPages === 0}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
       </div>
 
-      {selectedTarget && (
+      {mode === "user" && selectedTarget && (
         <InteractionLogsModal
           isOpen={!!selectedTarget}
           onClose={() => setSelectedTarget(null)}
