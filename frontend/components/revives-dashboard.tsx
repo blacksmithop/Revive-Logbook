@@ -1,9 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { RevivesTable } from "./revives-table"
 import { enrichRevives, type EnrichedRevive } from "@/lib/revive-enrichment"
 import {
@@ -16,6 +24,7 @@ import {
   clearAllData,
 } from "@/lib/indexeddb"
 import { Loader2, RefreshCw, LogOut, ChevronDown, Download } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import * as XLSX from "xlsx"
 
 interface RevivesDashboardProps {

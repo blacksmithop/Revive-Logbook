@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { saveApiKey, saveApiMode } from "@/lib/indexeddb"
 import { ExternalLink, Info } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface LoginFormProps {
   onLogin: () => void
@@ -17,6 +18,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [mode, setMode] = useState<"user" | "faction">("user")
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,6 +49,10 @@ export function LoginForm({ onLogin }: LoginFormProps) {
 
       await saveApiKey(apiKey)
       await saveApiMode(mode)
+      toast({
+        title: "Logged in",
+        description: `Authenticated as ${mode === "user" ? "User" : "Faction"} successfully.`,
+      })
       onLogin()
     } catch (err) {
       setError("Failed to authenticate. Please check your API key.")
