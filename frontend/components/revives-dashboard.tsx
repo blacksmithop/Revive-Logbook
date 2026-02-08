@@ -41,6 +41,16 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   const [hasMoreData, setHasMoreData] = useState(true)
   const [mode, setMode] = useState<"user" | "faction">("user")
   const [factionId, setFactionId] = useState<number>(0)
+  const [showExportConfirm, setShowExportConfirm] = useState(false)
+  const { toast } = useToast()
+  const filteredRevivesRef = useRef<EnrichedRevive[]>([])
+
+  const [filteredCount, setFilteredCount] = useState(0)
+
+  const handleFilteredRevivesChange = useCallback((filtered: EnrichedRevive[]) => {
+    filteredRevivesRef.current = filtered
+    setFilteredCount(filtered.length)
+  }, [])
 
   const fetchRevives = async (backfill = false) => {
     if (backfill) {
@@ -105,8 +115,24 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         const allRevives = await getAllRevives(currentMode)
         const enriched = enrichRevives(allRevives, fetchedRevives[0]?.reviver?.id || userReviveId)
         setRevives(enriched)
+
+        if (backfill) {
+          toast({
+            title: "Loaded more revives",
+            description: `Fetched ${fetchedRevives.length} revives. Total: ${allRevives.length}`,
+          })
+        } else {
+          toast({
+            title: "Revives refreshed",
+            description: `Loaded ${fetchedRevives.length} latest revives.`,
+          })
+        }
       } else if (backfill) {
         setHasMoreData(false)
+        toast({
+          title: "No more data",
+          description: "All available revives have been loaded.",
+        })
       }
     } catch (err) {
       setError("Failed to fetch revives. Please try again.")
@@ -155,6 +181,10 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   const handleClearApiKey = async () => {
     try {
       await clearApiKey()
+      toast({
+        title: "Logged out",
+        description: "Your API key has been cleared.",
+      })
       onLogout()
     } catch (err) {
       console.error("Failed to clear API key:", err)
@@ -165,6 +195,10 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     if (confirm("Are you sure you want to clear all data? This will remove your API key and all cached revives.")) {
       try {
         await clearAllData()
+        toast({
+          title: "All data cleared",
+          description: "API key, cached revives, payment statuses, and filters have been removed.",
+        })
         onLogout()
       } catch (err) {
         console.error("Failed to clear all data:", err)
@@ -172,13 +206,27 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     }
   }
 
-  const handleExportToExcel = () => {
+  const handleExportClick = () => {
     if (revives.length === 0) {
-      alert("No data to export")
+      toast({ title: "No data", description: "No revives to export." })
+      return
+    }
+    setShowExportConfirm(true)
+  }
+
+  const handleExportToExcel = async (useFilters: boolean) => {
+    setShowExportConfirm(false)
+
+    const sourceRevives = useFilters ? filteredRevivesRef.current : revives
+    if (sourceRevives.length === 0) {
+      toast({ title: "No data", description: "No revives match the current filters." })
       return
     }
 
-    const sortedRevives = [...revives].sort((a, b) => b.timestamp - a.timestamp)
+    const { getAllPaymentStatuses } = await import("@/lib/indexeddb")
+    const paymentStatuses = await getAllPaymentStatuses()
+
+    const sortedRevives = [...sourceRevives].sort((a, b) => b.timestamp - a.timestamp)
 
     // Prepare data rows based on mode
     const data = sortedRevives.map((revive) => {
@@ -191,7 +239,8 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         second: "2-digit",
       })
       const outcome = revive.Success ? "Success" : "Failed"
-      const paymentStatus = revive.isPaid ? "Paid" : "Unpaid"
+      const paymentId = `${revive.timestamp}_${revive.target.id}`
+      const paymentStatus = paymentStatuses[paymentId] ? "Paid" : "Unpaid"
       const reviveChance = `${revive.Chance.toFixed(2)}%`
 
       if (mode === "user") {
@@ -283,6 +332,11 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+
+    toast({
+      title: "Export complete",
+      description: `Exported ${sortedRevives.length} revives${useFilters ? " (filtered)" : ""} to ${filename}`,
+    })
   }
 
   return (
@@ -302,7 +356,7 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleExportToExcel}
+                    onClick={handleExportClick}
                     disabled={revives.length === 0}
                     className="flex-1 sm:flex-initial bg-transparent"
                   >
@@ -358,7 +412,7 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : revives.length > 0 ? (
-                <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} mode={mode} />
+                <RevivesTable revives={revives} onLoadMore={handleLoadMore} isLoadingMore={isLoadingMore} mode={mode} onFilteredRevivesChange={handleFilteredRevivesChange} />
               ) : (
                 <div className="text-center py-12 text-muted-foreground">No revives found</div>
               )}
@@ -366,6 +420,26 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
           </Card>
         </div>
       </div>
+
+      <Dialog open={showExportConfirm} onOpenChange={setShowExportConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Revives</DialogTitle>
+            <DialogDescription>
+              You have {revives.length} total revives and {filteredCount} after applying filters.
+              Would you like to export with the current filters applied?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => handleExportToExcel(false)} className="bg-transparent">
+              Export All ({revives.length})
+            </Button>
+            <Button onClick={() => handleExportToExcel(true)}>
+              Export Filtered ({filteredCount})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
         Created by{" "}

@@ -34,14 +34,15 @@ interface RevivesTableProps {
   revives: EnrichedRevive[]
   onLoadMore: () => void
   isLoadingMore: boolean
-  mode: "user" | "faction" // Added mode prop to distinguish user/faction API mode
-  onPaymentStatusChange: (timestamp: number, targetId: number) => void
+  mode: "user" | "faction"
+  onPaymentStatusChange?: (timestamp: number, targetId: number) => void
+  onFilteredRevivesChange?: (filtered: EnrichedRevive[]) => void
 }
 
 type SortField = "timestamp" | "skill" | "likelihood"
 type SortDirection = "asc" | "desc"
 
-export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPaymentStatusChange }: RevivesTableProps) {
+export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPaymentStatusChange, onFilteredRevivesChange }: RevivesTableProps) {
   const [sortField, setSortField] = useState<SortField>("timestamp")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [currentPage, setCurrentPage] = useState(1)
@@ -69,47 +70,8 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
 
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    const loadPaymentStatuses = async () => {
-      const statuses = await getAllPaymentStatuses()
-      setPaymentStatuses(statuses)
-    }
-    loadPaymentStatuses()
-  }, [])
-
-  useEffect(() => {
-    const loadExcludedFilters = async () => {
-      const filters = await getExcludedFilters()
-      if (filters) {
-        setExcludedPlayers(new Set(filters.players))
-        setExcludedFactions(new Set(filters.factions))
-      }
-    }
-    loadExcludedFilters()
-  }, [])
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [categoryFilter, outcomeFilter, playerSearch, factionSearch, excludedPlayers, excludedFactions, dateRange])
-
-  const togglePaymentStatus = async (timestamp: number, targetId: number) => {
-    const id = `${timestamp}_${targetId}`
-    const currentStatus = paymentStatuses[id] ?? false
-    const newStatus = !currentStatus
-
-    await setPaymentStatus(id, newStatus)
-    setPaymentStatuses((prev) => ({ ...prev, [id]: newStatus }))
-    onPaymentStatusChange(timestamp, targetId)
-  }
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortDirection("desc")
-    }
-  }
+  const [showPlayerSuggestions, setShowPlayerSuggestions] = useState(false)
+  const [showFactionSuggestions, setShowFactionSuggestions] = useState(false)
 
   const uniquePlayers = useMemo(() => {
     const players = new Set<string>()
@@ -126,6 +88,37 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
     })
     return Array.from(factions).sort()
   }, [revives])
+
+  const playerSuggestions = useMemo(() => {
+    const searchLower = playerSearch.toLowerCase()
+    const players = uniquePlayers
+    return players.filter((p) => p.toLowerCase().includes(searchLower)).slice(0, 8)
+  }, [playerSearch, uniquePlayers])
+
+  const factionSuggestions = useMemo(() => {
+    const searchLower = factionSearch.toLowerCase()
+    const factions = uniqueFactions
+    return factions.filter((f) => f.toLowerCase().includes(searchLower)).slice(0, 8)
+  }, [factionSearch, uniqueFactions])
+
+  const togglePaymentStatus = async (timestamp: number, targetId: number) => {
+    const id = `${timestamp}_${targetId}`
+    const currentStatus = paymentStatuses[id] ?? false
+    const newStatus = !currentStatus
+
+    await setPaymentStatus(id, newStatus)
+    setPaymentStatuses((prev) => ({ ...prev, [id]: newStatus }))
+    onPaymentStatusChange?.(timestamp, targetId)
+  }
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDirection("desc")
+    }
+  }
 
   const filteredPlayersForExclude = useMemo(() => {
     let players = uniquePlayers
@@ -362,28 +355,101 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
     }
   }
 
+  useEffect(() => {
+    const loadPaymentStatuses = async () => {
+      const statuses = await getAllPaymentStatuses()
+      setPaymentStatuses(statuses)
+    }
+    loadPaymentStatuses()
+  }, [])
+
+  useEffect(() => {
+    const loadExcludedFilters = async () => {
+      const filters = await getExcludedFilters()
+      if (filters) {
+        setExcludedPlayers(new Set(filters.players))
+        setExcludedFactions(new Set(filters.factions))
+      }
+    }
+    loadExcludedFilters()
+  }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [categoryFilter, outcomeFilter, playerSearch, factionSearch, excludedPlayers, excludedFactions, dateRange])
+
+  useEffect(() => {
+    onFilteredRevivesChange?.(filteredAndSortedRevives)
+  }, [filteredAndSortedRevives, onFilteredRevivesChange])
+
   return (
     <div className="space-y-3">
       {/* Row 1: Search Player, Search Faction, Date Range */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-        <div className="space-y-2">
+        <div className="space-y-2 relative">
           <label className="text-sm font-medium">Search Player</label>
           <Input
             placeholder="Player name..."
             value={playerSearch}
             className="bg-transparent"
-            onChange={(e) => setPlayerSearch(e.target.value)}
+            onChange={(e) => {
+              setPlayerSearch(e.target.value)
+              setShowPlayerSuggestions(true)
+            }}
+            onFocus={() => setShowPlayerSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowPlayerSuggestions(false), 150)}
           />
+          {showPlayerSuggestions && playerSuggestions.length > 0 && (
+            <div className="absolute z-50 top-full mt-1 w-full bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {playerSuggestions.map((player) => (
+                <button
+                  key={player}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setPlayerSearch(player)
+                    setShowPlayerSuggestions(false)
+                  }}
+                >
+                  {player}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 relative">
           <label className="text-sm font-medium">Search Faction</label>
           <Input
             placeholder="Faction name..."
             value={factionSearch}
             className="bg-transparent"
-            onChange={(e) => setFactionSearch(e.target.value)}
+            onChange={(e) => {
+              setFactionSearch(e.target.value)
+              setShowFactionSuggestions(true)
+            }}
+            onFocus={() => setShowFactionSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowFactionSuggestions(false), 150)}
           />
+          {showFactionSuggestions && factionSuggestions.length > 0 && (
+            <div className="absolute z-50 top-full mt-1 w-full bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {factionSuggestions.map((faction) => (
+                <button
+                  key={faction}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setFactionSearch(faction)
+                    setShowFactionSuggestions(false)
+                  }}
+                >
+                  {faction}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2 md:col-span-2">
