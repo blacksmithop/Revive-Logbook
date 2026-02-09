@@ -23,9 +23,11 @@ import {
   clearApiKey,
   clearAllData,
 } from "@/lib/indexeddb"
-import { Loader2, RefreshCw, LogOut, ChevronDown, Download } from "lucide-react"
+import { Loader2, RefreshCw, LogOut, ChevronDown, Download, Receipt, Settings } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import * as XLSX from "xlsx"
+import { ReceiptModal } from "./receipt-modal"
+import { ReceiptSettingsModal } from "./receipt-settings-modal"
 
 interface RevivesDashboardProps {
   onLogout: () => void
@@ -42,6 +44,9 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   const [mode, setMode] = useState<"user" | "faction">("user")
   const [factionId, setFactionId] = useState<number>(0)
   const [showExportConfirm, setShowExportConfirm] = useState(false)
+  const [showClearDataConfirm, setShowClearDataConfirm] = useState(false)
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [showReceiptSettings, setShowReceiptSettings] = useState(false)
   const { toast } = useToast()
   const filteredRevivesRef = useRef<EnrichedRevive[]>([])
 
@@ -178,7 +183,7 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     fetchRevives(true)
   }
 
-  const handleClearApiKey = async () => {
+  const handleLogout = async () => {
     try {
       await clearApiKey()
       toast({
@@ -192,17 +197,16 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
   }
 
   const handleClearAllData = async () => {
-    if (confirm("Are you sure you want to clear all data? This will remove your API key and all cached revives.")) {
-      try {
-        await clearAllData()
-        toast({
-          title: "All data cleared",
-          description: "API key, cached revives, payment statuses, and filters have been removed.",
-        })
-        onLogout()
-      } catch (err) {
-        console.error("Failed to clear all data:", err)
-      }
+    setShowClearDataConfirm(false)
+    try {
+      await clearAllData()
+      toast({
+        title: "All data cleared",
+        description: "API key, cached revives, payment statuses, and filters have been removed.",
+      })
+      onLogout()
+    } catch (err) {
+      console.error("Failed to clear all data:", err)
     }
   }
 
@@ -339,6 +343,10 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
     })
   }
 
+  const handleClearApiKey = async () => {
+    await handleLogout()
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="flex-1 p-3 sm:p-4 md:p-6">
@@ -353,6 +361,25 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                   <CardDescription className="text-sm">Tracking {revives.length} revives</CardDescription>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReceiptSettings(true)}
+                    className="px-3 bg-transparent"
+                    title="Receipt Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReceiptModal(true)}
+                    disabled={revives.length === 0}
+                    className="flex-1 sm:flex-initial bg-transparent"
+                  >
+                    <Receipt className="w-4 h-4 mr-1" />
+                    Receipt
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -396,9 +423,9 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={handleClearApiKey}>Clear API Key & Logout</DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
                       <DropdownMenuItem onClick={handleClearAllData} className="text-destructive">
-                        Clear All Data
+                        Logout & Clear Data
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -421,6 +448,30 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
         </div>
       </div>
 
+      <Dialog open={showClearDataConfirm} onOpenChange={setShowClearDataConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear All Data</DialogTitle>
+            <DialogDescription>
+              This will permanently remove your API key, all cached revives, payment statuses, and saved filters. Are
+              you sure?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowClearDataConfirm(false)}
+              className="bg-transparent"
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleClearAllData}>
+              Clear All & Logout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showExportConfirm} onOpenChange={setShowExportConfirm}>
         <DialogContent>
           <DialogHeader>
@@ -440,6 +491,18 @@ export function RevivesDashboard({ onLogout }: RevivesDashboardProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReceiptModal
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        revives={revives}
+        mode={mode}
+      />
+
+      <ReceiptSettingsModal
+        isOpen={showReceiptSettings}
+        onClose={() => setShowReceiptSettings(false)}
+      />
 
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
         Created by{" "}

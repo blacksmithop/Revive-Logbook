@@ -384,8 +384,8 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
 
   return (
     <div className="space-y-3">
-      {/* Row 1: Search Player, Search Faction, Date Range */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      {/* Row 1: Search Player, Search Faction, Exclude Players, Exclude Factions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
         <div className="space-y-2 relative">
           <label className="text-sm font-medium">Search Player</label>
           <Input
@@ -452,38 +452,87 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
           )}
         </div>
 
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-sm font-medium">Date Range</label>
-          <div className="flex gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange.from ? format(dateRange.from, "PPP") : "From"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={dateRange.from} onSelect={handleFromDateSelect} initialFocus />
-              </PopoverContent>
-            </Popover>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Exclude Players ({excludedPlayers.size})</label>
+          <DropdownMenu
+            open={excludePlayerOpen}
+            onOpenChange={(open) => {
+              setExcludePlayerOpen(open)
+              if (!open) {
+                setExcludePlayerSearch("")
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent">
+                {excludedPlayers.size > 0 ? `${excludedPlayers.size} excluded` : "Select players..."}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
+              <div className="p-2 sticky top-0 bg-background">
+                <Input
+                  placeholder="Search players..."
+                  value={excludePlayerSearch}
+                  onChange={(e) => setExcludePlayerSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              {filteredPlayersForExclude.map((player) => (
+                <div
+                  key={player}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-accent cursor-pointer"
+                  onClick={() => toggleExcludePlayer(player)}
+                >
+                  <Checkbox checked={excludedPlayers.has(player)} />
+                  <span className="text-sm truncate">{player}</span>
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="flex-1 justify-start bg-transparent text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange.to ? format(dateRange.to, "PPP") : "To"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={dateRange.to} onSelect={handleToDateSelect} initialFocus />
-              </PopoverContent>
-            </Popover>
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Exclude Factions ({excludedFactions.size})</label>
+          <DropdownMenu
+            open={excludeFactionOpen}
+            onOpenChange={(open) => {
+              setExcludeFactionOpen(open)
+              if (!open) {
+                setExcludeFactionSearch("")
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent">
+                {excludedFactions.size > 0 ? `${excludedFactions.size} excluded` : "Select factions..."}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
+              <div className="p-2 sticky top-0 bg-background">
+                <Input
+                  placeholder="Search factions..."
+                  value={excludeFactionSearch}
+                  onChange={(e) => setExcludeFactionSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              {filteredFactionsForExclude.map((faction) => (
+                <div
+                  key={faction}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-accent cursor-pointer"
+                  onClick={() => toggleExcludeFaction(faction)}
+                >
+                  <Checkbox checked={excludedFactions.has(faction)} />
+                  <span className="text-sm truncate">{faction}</span>
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Row 2: Category, Outcome, Clear Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      {/* Row 2: Category, Outcome, Date Range, Clear */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-[auto_auto_1fr_1fr_auto] gap-3 items-end">
         <div className="space-y-2">
           <label className="text-sm font-medium">Category</label>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -516,104 +565,39 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
           </Select>
         </div>
 
-        <div className="md:col-span-2 flex justify-end">
-          <Button variant="outline" onClick={resetFilters} className="bg-transparent h-10">
-            Reset
-          </Button>
-        </div>
-      </div>
-
-      {/* Row 3: Exclude Players, Exclude Factions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Exclude Players ({excludedPlayers.size})</label>
-          <DropdownMenu
-            open={excludePlayerOpen}
-            onOpenChange={(open) => {
-              setExcludePlayerOpen(open)
-              if (!open) {
-                setExcludePlayerSearch("")
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                {excludedPlayers.size > 0 ? `${excludedPlayers.size} excluded` : "Select players..."}
+          <label className="text-sm font-medium">From</label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent text-left font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange.from ? format(dateRange.from, "PPP") : "From"}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
-              <div className="p-2 sticky top-0 bg-background">
-                <Input
-                  placeholder="Search players..."
-                  value={excludePlayerSearch}
-                  onChange={(e) => setExcludePlayerSearch(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-              <div className="p-2 space-y-1">
-                {filteredPlayersForExclude.length > 0 ? (
-                  filteredPlayersForExclude.map((player) => (
-                    <div
-                      key={player}
-                      className="flex items-center space-x-2 py-1 px-2 hover:bg-accent rounded cursor-pointer"
-                      onClick={() => toggleExcludePlayer(player)}
-                    >
-                      <Checkbox checked={excludedPlayers.has(player)} />
-                      <span className="text-sm">{player}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-sm text-muted-foreground text-center py-2">No players found</div>
-                )}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateRange.from} onSelect={handleFromDateSelect} initialFocus />
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Exclude Factions ({excludedFactions.size})</label>
-          <DropdownMenu
-            open={excludeFactionOpen}
-            onOpenChange={(open) => {
-              setExcludeFactionOpen(open)
-              if (!open) {
-                setExcludeFactionSearch("")
-              }
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                {excludedFactions.size > 0 ? `${excludedFactions.size} excluded` : "Select factions..."}
+          <label className="text-sm font-medium">To</label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start bg-transparent text-left font-normal">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange.to ? format(dateRange.to, "PPP") : "To"}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto" align="start">
-              <div className="p-2 sticky top-0 bg-background">
-                <Input
-                  placeholder="Search factions..."
-                  value={excludeFactionSearch}
-                  onChange={(e) => setExcludeFactionSearch(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-              <div className="p-2 space-y-1">
-                {filteredFactionsForExclude.length > 0 ? (
-                  filteredFactionsForExclude.map((faction) => (
-                    <div
-                      key={faction}
-                      className="flex items-center space-x-2 py-1 px-2 hover:bg-accent rounded cursor-pointer"
-                      onClick={() => toggleExcludeFaction(faction)}
-                    >
-                      <Checkbox checked={excludedFactions.has(faction)} />
-                      <span className="text-sm">{faction}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-sm text-muted-foreground text-center py-2">No factions found</div>
-                )}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateRange.to} onSelect={handleToDateSelect} initialFocus />
+            </PopoverContent>
+          </Popover>
         </div>
+
+        <Button variant="ghost" onClick={resetFilters} className="h-10 text-muted-foreground hover:text-foreground">
+          Clear
+        </Button>
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
@@ -896,7 +880,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
             <div className="flex items-center gap-1">
               <Input
                 type="number"
-                min="1"
+                min={1}
                 max={totalPages}
                 value={pageJumpInput}
                 onChange={(e) => setPageJumpInput(e.target.value)}
@@ -957,6 +941,7 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
           onClose={() => setSelectedTarget(null)}
           targetId={selectedTarget.id}
           targetName={selectedTarget.name}
+          revives={revives}
         />
       )}
     </div>

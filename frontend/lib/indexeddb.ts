@@ -247,6 +247,58 @@ export async function saveApiMode(mode: "user" | "faction"): Promise<void> {
   })
 }
 
+export interface ReceiptSettings {
+  template: string
+  moneyPerRevive: number
+  xanaxPerRevive: number
+}
+
+const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
+  template: "Hello {target}, thank you for using my revive service.\nYour total outstanding bill for {revives_done} revives is {total_amount}.",
+  moneyPerRevive: 1800000,
+  xanaxPerRevive: 2,
+}
+
+export function getDefaultReceiptSettings(): ReceiptSettings {
+  return { ...DEFAULT_RECEIPT_SETTINGS }
+}
+
+export async function saveReceiptSettings(settings: ReceiptSettings): Promise<void> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readwrite")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    const request = store.put(settings, "receiptSettings")
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve()
+  })
+}
+
+export async function getReceiptSettings(): Promise<ReceiptSettings> {
+  const db = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([SETTINGS_STORE], "readonly")
+    const store = transaction.objectStore(SETTINGS_STORE)
+    const request = store.get("receiptSettings")
+
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result || { ...DEFAULT_RECEIPT_SETTINGS })
+  })
+}
+
+// Legacy — kept for backwards compat but no longer used
+export async function saveReceiptTemplate(template: string): Promise<void> {
+  const settings = await getReceiptSettings()
+  settings.template = template
+  await saveReceiptSettings(settings)
+}
+
+export async function getReceiptTemplate(): Promise<string | null> {
+  const settings = await getReceiptSettings()
+  return settings.template
+}
+
 export async function getApiMode(): Promise<"user" | "faction"> {
   const db = await initDB()
   return new Promise((resolve, reject) => {

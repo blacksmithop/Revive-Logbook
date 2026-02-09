@@ -130,7 +130,17 @@ export function LoginForm({ onLogin }: LoginFormProps) {
                     <p>• Your API Key is stored in the browser</p>
                     <p>• All requests are made in the browser itself</p>
                     <p>• Logout anytime to clear your data & API Key</p>
-                    <p>• Feel free to contact me in-game for any questions</p>
+                    <p>
+                      •{" "}
+                      <a
+                        href="https://www.torn.com/forums.php#/p=threads&f=67&t=16527395&b=0&a=0"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-white/90 hover:text-white font-semibold underline underline-offset-2 transition-colors"
+                      >
+                        Please share any feedback here
+                      </a>
+                    </p>
                   </div>
                 </div>
               </div>
