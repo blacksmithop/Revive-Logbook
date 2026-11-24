@@ -123,3 +123,38 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Touch devices: grow small controls' hit area to ~44px without changing layout. */
+@media (pointer: coarse) {
+  :where(main button, [role='tab'], [role='dialog'] button, [role='alertdialog'] button) {
+    position: relative;
+  }
+  :where(main button, [role='tab'], [role='dialog'] button, [role='alertdialog'] button)::after {
+    content: '';
+    position: absolute;
+    inset: -0.5rem;
+  }
+  /* Segmented groups (pagination) sit edge to edge; expanded areas would overlap. */
+  .tap-group > *::after {
+    content: none;
+  }
+}

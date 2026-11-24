@@ -27,6 +27,7 @@ import { getAllPaymentStatuses, setPaymentStatus, saveExcludedFilters, getExclud
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { CalendarIcon } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -853,70 +854,37 @@ export function RevivesTable({ revives, onLoadMore, isLoadingMore, mode, onPayme
         })}
       </div>
 
+      <DataTablePagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredAndSortedRevives.length}
+        pageSize={pageSize}
+        onPageChange={handlePageChange}
+        itemName="revives"
+        isLoading={isLoadingMore}
+      />
+
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages || 1}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(1)}
-              disabled={currentPage === 1}
-              title="Go to first page"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              title="Previous page"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={1}
-                max={totalPages}
-                value={pageJumpInput}
-                onChange={(e) => setPageJumpInput(e.target.value)}
-                onKeyDown={handlePageJumpKeyDown}
-                placeholder="Go to"
-                className="w-16 h-8 text-sm"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePageJump}
-                disabled={!pageJumpInput || Number(pageJumpInput) < 1 || Number(pageJumpInput) > totalPages}
-                title="Go to page"
-              >
-                Go
-              </Button>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages || totalPages === 0}
-              title="Next page"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(totalPages)}
-              disabled={currentPage === totalPages || totalPages === 0}
-              title="Go to last page"
-            >
-              <ChevronsRight className="w-4 h-4" />
-            </Button>
-          </div>
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={pageJumpInput}
+            onChange={(e) => setPageJumpInput(e.target.value)}
+            onKeyDown={handlePageJumpKeyDown}
+            placeholder="Go to"
+            aria-label="Jump to page"
+            className="w-20 h-8 text-sm"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePageJump}
+            disabled={!pageJumpInput || Number(pageJumpInput) < 1 || Number(pageJumpInput) > totalPages}
+          >
+            Go
+          </Button>
         </div>
 
         <div className="flex items-center gap-2">

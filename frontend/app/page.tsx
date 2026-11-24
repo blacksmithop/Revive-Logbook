@@ -36,15 +36,13 @@ export default function HomePage() {
 
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="dark">
-      {isAuthenticated ? <RevivesDashboard onLogout={handleLogout} /> : <LoginForm onLogin={handleLogin} />}
-    </div>
+    <main>{isAuthenticated ? <RevivesDashboard onLogout={handleLogout} /> : <LoginForm onLogin={handleLogin} />}</main>
   )
 }
